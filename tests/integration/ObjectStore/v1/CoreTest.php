@@ -204,6 +204,51 @@ class CoreTest extends TestCase
         require_once $this->sampleFile($replacements, 'objects/delete.php');
         $container->getObject($replacements['{newObjectName}'])->delete();
 
+        // Create a "large" object for testing
+        $large_object_filename = tempnam(sys_get_temp_dir(), 'openstack');
+        $large_object_contents = '';
+        for( $i=0; $i < 15; $i++ ) {
+            $large_object_contents .= str_pad($i + 1 . '  ' , 1023, '*' ) . "\n";
+        }
+        file_put_contents($large_object_filename, $large_object_contents);
+
+        $large_object_segment_container = sprintf('%s_segments', $containerName);
+        $replacements += [
+            '{largeObjectFile}' => $large_object_filename,
+            '{segmentSize}' => 1024,
+            '{objectName}' => 'test-file.txt',
+            '{containerName}' => $containerName,
+            '{segmentContainer}' => $large_object_segment_container,
+        ];
+        $this->logStep('Create large object');
+        require_once $this->sampleFile($replacements, 'objects/create_large_object.php');
+
+        $this->logStep('Fetch Large Object');
+        /** @var StreamInterface $stream */
+        require_once $this->sampleFile($replacements, 'objects/download.php');
+        $this->assertEquals($large_object_contents, $stream->getContents());
+
+        // Cleanup
+        $this->logStep('Clean Up Large Object Test.');
+        // - delete large object
+        $container->getObject($replacements['{objectName}'])->delete();
+
+        // Commented out because it returns a 409 Conflict.
+        // Maybe because the segments didn't get deleted when the main object 
+        // was deleted?
+        
+        /*
+        // - delete segment container
+        $this->getService()
+            ->getContainer($large_object_segment_container)
+            ->delete();
+        */        
+        // - delete temp file.
+        unlink($large_object_filename);
+
+
+
+
         $this->logStep('Delete container');
         $container->delete();
     }
